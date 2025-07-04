@@ -203,8 +203,10 @@ public class MainWindow : Window, IDisposable {
             ImGui.Dummy(new Vector2(0, 40));
 
             using (ImRaii.Disabled(this.selectedLoadout.LoadoutHotbars.Count == 0)) {
-                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.PlayCircle, "Apply Hotbars"))
+                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.PlayCircle, "Apply Hotbars")) {
                     this.selectedLoadout.ApplyToHotbars();
+                    UiHelpers.ShowNotification($"Hotbars from '{this.selectedLoadout.Name}' applied.");
+                }
             }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Apply the hotbars in this preset to your current hotbars.");
 
@@ -212,6 +214,7 @@ public class MainWindow : Window, IDisposable {
             if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Sync, "Updated Saved Hotbars")) {
                 this.selectedLoadout.LoadoutHotbars.Clear();
                 this.selectedLoadout.SaveHotbars();
+                UiHelpers.ShowNotification($"Hotbars saved to preset '{this.selectedLoadout.Name}'.");
                 Plugin.Configuration.Save();
             }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save your current hotbars to this loadout.");
@@ -253,7 +256,7 @@ public class MainWindow : Window, IDisposable {
         if (ImGui.IsItemHovered() && current != 0) {
             var action = Plugin.AozToNormal(current);
             ImGui.SetTooltip($"{Plugin.Action.GetRow(action).Name.ExtractText()} (#{current})" +
-                             $"\n(Right click to remove)");
+                             $"\n\n(Left click to change action; right click to remove)");
         } else if (ImGui.IsItemHovered()) ImGui.SetTooltip("Left click to add action.");
 
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
