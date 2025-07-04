@@ -91,10 +91,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
         // Services.AddonLifecycle.RegisterListener(AddonEvent.PostRefresh, "_ActionBar", this.HotbarUpdate);
 
-#if DEBUG
-        this.MainWindow.IsOpen = true;
-        // this.ConfigWindow.IsOpen = true;
-#endif
+// #if DEBUG
+//         this.MainWindow.IsOpen = true;
+//         // this.ConfigWindow.IsOpen = true;
+// #endif
 
         Services.ClientState.Login += OnLogin;
         Services.ClientState.Logout += OnLogout;
