@@ -1,5 +1,8 @@
 ﻿using System;
 using System.Numerics;
+using Dalamud.Interface.Colors;
+using Dalamud.Interface.Components;
+using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
 
@@ -10,84 +13,83 @@ public class ConfigWindow : Window, IDisposable {
 
     public ConfigWindow(Plugin plugin) : base("Better in Blue Config") {
         this.plugin = plugin;
-        this.Size = new Vector2(450, 400);
+
         this.SizeCondition = ImGuiCond.FirstUseEver;
+        this.SizeConstraints = new WindowSizeConstraints {
+            MinimumSize = new Vector2(350f, 400f),
+            MaximumSize = new Vector2(700f, 700f)
+        };
+        this.Size = new Vector2(500, 400);
     }
 
     public void Dispose() { }
 
-    public override void Draw() {
-        var applyToHotbars = Plugin.Configuration.ApplyToHotbars;
-        if (ImGui.Checkbox("Apply to hotbars", ref applyToHotbars)) {
-            Plugin.Configuration.ApplyToHotbars = applyToHotbars;
+    public override unsafe void Draw() {
+        //https://github.com/Caraxi/SimpleTweaksPlugin/blob/f71e8beaf1d81efcbee230e546dbe75d8f098522/Tweaks/SyncCrafterBars.cs#L29
+        ImGui.Text("Select hotbars to be saved and restored with your loadouts.");
+        ImGui.Dummy(new Vector2(0, 10));
+
+        ImGui.Indent();
+
+        var columns = (int) ((ImGui.GetWindowContentRegionMax() - ImGui.GetWindowContentRegionMin()).X
+                             / (150f * ImGui.GetIO().FontGlobalScale));
+        if (ImGui.Checkbox("Save Hotbars", ref Plugin.Configuration.SaveHotbarsStandard))
             Plugin.Configuration.Save();
-        }
+        ImGui.Dummy(new Vector2(0, 10));
+        if (Plugin.Configuration.SaveHotbarsStandard) {
+            ImGui.Columns(columns, "hotbarColumns", true);
+            for (uint i = 0; i < Plugin.Configuration.HotbarsStandard.Length; i++) {
+                var isShared = Plugin.RaptureHotbar->IsHotbarShared(i);
+                using (ImRaii.Disabled(isShared)) {
+                    if (ImGui.Checkbox($"Hotbar {i + 1}##syncBar_{i}",
+                                       ref Plugin.Configuration.HotbarsStandard[i]))
+                        Plugin.Configuration.Save();
+                }
 
-        if (ImGui.IsItemHovered()) {
-            ImGui.SetTooltip(
-                "If checked, applying a loadout will write each action to your hotbars.\n"
-                + "Hotbar contents are not saved to your character config until an action is moved."
-            );
-        }
+                if (isShared && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    ImGui.SetTooltip("Shared Hotbars will not be saved or restored.");
 
-        if (!applyToHotbars) ImGui.BeginDisabled();
-        this.HotbarSelector(true);
-        this.HotbarSelector(false);
-        if (!applyToHotbars) ImGui.EndDisabled();
+                if (isShared && Plugin.Configuration.HotbarsStandard[i]) {
+                    using (ImRaii.PushColor(ImGuiCol.TextDisabled, ImGuiColors.DalamudYellow)) {
+                        ImGui.SameLine();
+                        ImGuiComponents.HelpMarker("Shared Hotbars will not be saved or restored.");
+                    }
+                }
 
-        var applyToCrossHotbars = Plugin.Configuration.ApplyToCrossHotbars;
-        if (ImGui.Checkbox("Apply to cross hotbars", ref applyToCrossHotbars)) {
-            Plugin.Configuration.ApplyToCrossHotbars = applyToCrossHotbars;
-            Plugin.Configuration.Save();
-        }
-
-        if (ImGui.IsItemHovered()) {
-            ImGui.SetTooltip(
-                "If checked, applying a loadout will write each action to your hotbars.\n"
-                + "Hotbar contents are not saved to your character config until an action is moved."
-            );
-        }
-
-        if (!applyToCrossHotbars) ImGui.BeginDisabled();
-        this.CrossHotbarSelector(true);
-        this.CrossHotbarSelector(false);
-        if (!applyToCrossHotbars) ImGui.EndDisabled();
-    }
-
-    private void HotbarSelector(bool firstHotbar) {
-        var current = firstHotbar
-                          ? Plugin.Configuration.HotbarOne
-                          : Plugin.Configuration.HotbarTwo;
-
-        if (ImGui.InputInt(firstHotbar ? "Hotbar 1" : "Hotbar 2", ref current)) {
-            if (current > 10) current = 10;
-            if (current < 1) current = 1;
-
-            if (firstHotbar) {
-                Plugin.Configuration.HotbarOne = current;
-            } else {
-                Plugin.Configuration.HotbarTwo = current;
+                ImGui.NextColumn();
             }
-
-            Plugin.Configuration.Save();
+            ImGui.Columns(1);
+            ImGui.NewLine();
+            ImGui.Separator();
         }
-    }
 
-    private void CrossHotbarSelector(bool firstHotbar) {
-        var current = firstHotbar
-                          ? Plugin.Configuration.CrossHotbarOne
-                          : Plugin.Configuration.CrossHotbarTwo;
+        if (ImGui.Checkbox("Save Cross Hotbars", ref Plugin.Configuration.SaveHotbarsCross))
+            Plugin.Configuration.Save();
+        ImGui.Dummy(new Vector2(0, 10));
+        if (Plugin.Configuration.SaveHotbarsCross) {
+            ImGui.Columns(columns, "crosshotbarColumns", true);
+            for (uint i = 0; i < Plugin.Configuration.HotbarsCross.Length; i++) {
+                var isShared = Plugin.RaptureHotbar->IsHotbarShared(i + 10);
+                using (ImRaii.Disabled(isShared)) {
+                    if (ImGui.Checkbox($"Cross Hotbar {i + 1}##syncCrossBar_{i}",
+                                       ref Plugin.Configuration.HotbarsCross[i]))
+                        Plugin.Configuration.Save();
+                }
 
-        if (ImGui.InputInt(firstHotbar ? "Cross hotbar 1" : "Cross hotbar 2", ref current)) {
-            if (current > 8) current = 8;
-            if (current < 1) current = 1;
-            if (firstHotbar) {
-                Plugin.Configuration.CrossHotbarOne = current;
-            } else {
-                Plugin.Configuration.CrossHotbarTwo = current;
+                if (isShared && ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    ImGui.SetTooltip("Shared Hotbars will not be saved or restored.");
+
+                if (isShared && Plugin.Configuration.HotbarsCross[i]) {
+                    using (ImRaii.PushColor(ImGuiCol.TextDisabled, ImGuiColors.DalamudYellow)) {
+                        ImGui.SameLine();
+                        ImGuiComponents.HelpMarker("Shared Hotbars will not be saved or restored.");
+                    }
+                }
+
+                ImGui.NextColumn();
             }
-
-            Plugin.Configuration.Save();
+            ImGui.Columns(1);
         }
+        ImGui.Unindent();
     }
 }
