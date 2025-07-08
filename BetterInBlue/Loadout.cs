@@ -146,12 +146,24 @@ public class Loadout(string name = "Unnamed Loadout") {
 
             Services.Log.Verbose($"Restoring hotbar {bar.Id}");
 
-            for (uint i = 0; i < bar.MaxSlots; i++)
-                Plugin.RaptureHotbar->GetSlotById(bar.Id, i)->Set(
+            for (uint i = 0; i < bar.MaxSlots; i++) {
+                var slot = Plugin.RaptureHotbar->GetSlotById(bar.Id, i);
+                slot->Set(
                     bar.Slots[i].CommandType,
                     bar.Slots[i].CommandId
                 );
+                Plugin.RaptureHotbar->WriteSavedSlot(Plugin.RaptureHotbar->ActiveHotbarClassJobId,
+                                                     bar.Id,
+                                                     i,
+                                                     slot,
+                                                     false,
+                                                     Services.ClientState.IsPvP);
+                
+            }
         }
+        // Plugin.RaptureHotbar->UserFileEvent.HasChanges = true;
+        // Plugin.RaptureHotbar->UserFileEvent.IsSavePending = true;
+        // Plugin.RaptureHotbar->SaveFile(true); //???
     }
 }
 
