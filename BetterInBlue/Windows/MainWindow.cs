@@ -131,6 +131,8 @@ public class MainWindow : Window, IDisposable {
                                 "You should have gotten an error message on screen explaining why. If not, please report this!",
                                 "Failed to apply loadout",
                                 NotificationType.Error);
+                        } else {
+                            UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
                         }
                     }
                 }
@@ -202,7 +204,9 @@ public class MainWindow : Window, IDisposable {
             ImGui.Separator();
             ImGui.Dummy(new Vector2(0, 40));
 
-            using (ImRaii.Disabled(this.selectedLoadout.LoadoutHotbars.Count == 0)) {
+            var isBluMage = Services.ClientState.LocalPlayer?.ClassJob.RowId == 36;
+
+            using (ImRaii.Disabled(!isBluMage || this.selectedLoadout.LoadoutHotbars.Count == 0)) {
                 if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.PlayCircle, "Apply Hotbars")) {
                     this.selectedLoadout.ApplyToHotbars();
                     UiHelpers.ShowNotification($"Hotbars from '{this.selectedLoadout.Name}' applied.");
@@ -211,12 +215,14 @@ public class MainWindow : Window, IDisposable {
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Apply the hotbars in this preset to your current hotbars.");
 
             ImGui.SameLine();
-            if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Sync, "Updated Saved Hotbars")) {
-                this.selectedLoadout.LoadoutHotbars.Clear();
-                this.selectedLoadout.SaveHotbars();
-                UiHelpers.ShowNotification($"Hotbars saved to preset '{this.selectedLoadout.Name}'.");
-                Plugin.Configuration.Save();
-            }
+
+            using (ImRaii.Disabled(!isBluMage))
+                if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Sync, "Updated Saved Hotbars")) {
+                    this.selectedLoadout.LoadoutHotbars.Clear();
+                    this.selectedLoadout.SaveHotbars();
+                    UiHelpers.ShowNotification($"Hotbars saved to preset '{this.selectedLoadout.Name}'.");
+                    Plugin.Configuration.Save();
+                }
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save your current hotbars to this loadout.");
 
             ImGui.Dummy(new Vector2(0, 10));
