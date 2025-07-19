@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
@@ -18,6 +19,8 @@ public class MainWindow : Window, IDisposable {
     private string searchFilter = string.Empty;
     private Loadout? selectedLoadout;
     private bool shouldOpen;
+    private int dragDropIndex = -1;
+    private Action? endDropAction;
 
     public MainWindow(Plugin plugin) : base("Better in Blue") {
         this.plugin = plugin;
@@ -47,6 +50,9 @@ public class MainWindow : Window, IDisposable {
         }
 
         this.DrawContextMenu();
+
+        endDropAction?.Invoke();
+        endDropAction = null;
     }
 
     private unsafe void DrawSidebar(Vector2 size) {
@@ -100,9 +106,11 @@ public class MainWindow : Window, IDisposable {
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open the config window.");
             ImGui.Separator();
 
-            foreach (var loadout in Plugin.Configuration.Loadouts) {
+            for (var index = 0; index < Plugin.Configuration.Loadouts.Count; index++) {
+                var loadout = Plugin.Configuration.Loadouts[index];
                 var label = loadout.Name + "##" + loadout.GetHashCode();
                 if (ImGui.Selectable(label, loadout == this.selectedLoadout)) this.selectedLoadout = loadout;
+                DrawDragDrop(Plugin.Configuration.Loadouts, index);
             }
 
             ImGui.EndChild();
@@ -252,6 +260,31 @@ public class MainWindow : Window, IDisposable {
             ImGui.EndChild();
         }
     }
+
+    private unsafe void DrawDragDrop(List<Loadout> list, int index) {
+        const string dragDropLabel = "BlueLoadoutDragDrop";
+
+        using (var target = ImRaii.DragDropTarget()) {
+            if (target.Success && ImGui.AcceptDragDropPayload(dragDropLabel).NativePtr != null) {
+                if (dragDropIndex >= 0) {
+                    var i = dragDropIndex;
+                    this.endDropAction = () => list.Move(i, index);
+                }
+                this.dragDropIndex = -1;
+            }
+        }
+
+
+        using (var source = ImRaii.DragDropSource()) {
+            if (source) {
+                ImGui.Text($"Move {list[index].Name} here...");
+                if (ImGui.SetDragDropPayload(dragDropLabel, 0, 0)) {
+                    this.dragDropIndex = index;
+                }
+            }
+        }
+    }
+
 
     private void DrawSpellSlot(int index) {
         if (this.selectedLoadout == null) return;

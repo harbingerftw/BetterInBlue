@@ -1,4 +1,5 @@
-﻿using Dalamud.Interface;
+﻿using System.Collections.Generic;
+using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility.Raii;
@@ -43,5 +44,12 @@ public static class UiHelpers {
             Type = type
         };
         Services.NotificationManager.AddNotification(notification);
+    }
+
+    public static void Move<T>(this List<T> list, int fromIndex, int toIndex) {
+        var temp = list[fromIndex];
+        list.RemoveAt(fromIndex);
+        if (toIndex > fromIndex) toIndex--;
+        list.Insert(toIndex, temp);
     }
 }
