@@ -50,7 +50,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
     public Plugin(IDalamudPluginInterface pluginInterface) {
         pluginInterface.Create<Services>();
         NativeController = new NativeController(Services.PluginInterface);
-        BlueWindow = new AddonController<AddonAOZNotebook>(Services.PluginInterface, "AOZNotebook");
+        BlueWindow = new AddonController<AddonAOZNotebook>(Services.PluginInterface);
         BlueWindow.OnAttach += this.AttachNode;
         BlueWindow.OnDetach += this.DetachNodes;
         BlueWindow.OnRefresh += this.OnNodeUpdate;

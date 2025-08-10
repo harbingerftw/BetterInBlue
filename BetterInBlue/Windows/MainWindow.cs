@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Numerics;
+using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility.Raii;
 using Dalamud.Interface.Windowing;
 using FFXIVClientStructs.FFXIV.Client.Game;
-using ImGuiNET;
 
 namespace BetterInBlue.Windows;
 
@@ -265,7 +265,7 @@ public class MainWindow : Window, IDisposable {
         const string dragDropLabel = "BlueLoadoutDragDrop";
 
         using (var target = ImRaii.DragDropTarget()) {
-            if (target.Success && ImGui.AcceptDragDropPayload(dragDropLabel).NativePtr != null) {
+            if (target.Success && !ImGui.AcceptDragDropPayload(dragDropLabel).IsNull) {
                 if (dragDropIndex >= 0) {
                     var i = dragDropIndex;
                     this.endDropAction = () => list.Move(i, index);
@@ -278,7 +278,7 @@ public class MainWindow : Window, IDisposable {
         using (var source = ImRaii.DragDropSource()) {
             if (source) {
                 ImGui.Text($"Move {list[index].Name} here...");
-                if (ImGui.SetDragDropPayload(dragDropLabel, 0, 0)) {
+                if (ImGui.SetDragDropPayload(dragDropLabel, null, 0)) {
                     this.dragDropIndex = index;
                 }
             }
@@ -291,7 +291,7 @@ public class MainWindow : Window, IDisposable {
         var current = this.selectedLoadout.Actions[index];
         var icon = Plugin.GetIcon(current);
 
-        ImGui.Image(icon.ImGuiHandle, new Vector2(48, 48));
+        ImGui.Image(icon.Handle, new Vector2(48, 48));
         if (ImGui.IsItemHovered() && current != 0) {
             var action = Plugin.AozToNormal(current);
             ImGui.SetTooltip($"{Plugin.Action.GetRow(action).Name.ExtractText()} (#{current})" +
@@ -333,7 +333,7 @@ public class MainWindow : Window, IDisposable {
 
                     var rowHeight = ImGui.GetTextLineHeightWithSpacing();
 
-                    ImGui.Image(listIcon.ImGuiHandle, new Vector2(rowHeight, rowHeight));
+                    ImGui.Image(listIcon.Handle, new Vector2(rowHeight, rowHeight));
                     ImGui.SameLine();
 
                     var tooManyOfAction = this.selectedLoadout!.ActionCount(listAction.RowId) > 0;
