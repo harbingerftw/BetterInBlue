@@ -121,11 +121,6 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
         Services.CommandManager.RemoveHandler(CommandName);
 
-        BlueWindow.OnAttach -= this.AttachNode;
-        BlueWindow.OnDetach -= this.DetachNodes;
-        BlueWindow.OnRefresh -= this.OnNodeUpdate;
-        BlueWindow.OnUpdate -= this.OnNodeUpdate;
-
         BlueWindow.Dispose();
         NativeController.Dispose();
     }

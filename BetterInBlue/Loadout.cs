@@ -40,7 +40,9 @@ public class Loadout(string name = "Unnamed Loadout") {
             var obj = JsonConvert.DeserializeObject<Loadout>(str);
             if (obj != null) obj.LoadoutHotbars = [];
             return obj;
-        } catch (Exception) {
+        } catch (Exception e) {
+            Services.Log.Warning("Failed to import loadout.");
+            Services.Log.Verbose(e.ToString());;
             return null;
         }
     }
