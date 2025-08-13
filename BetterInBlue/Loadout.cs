@@ -91,12 +91,16 @@ public class Loadout(string name = "Unnamed Loadout") {
 
             if (action != 0) {
                 // Can't have two actions in the same loadout
-                if (this.ActionCount(action) > 1)
+                if (this.ActionCount(action) > 1) {
                     errors.Add("You can not have duplicate actions.");
+                    break;
+                }
 
                 // Can't apply an action you don't have
-                if (!this.ActionUnlocked(action))
+                if (!this.ActionUnlocked(action)) {
                     errors.Add("You must have every loadout action unlocked.");
+                    break;
+                }
             }
         }
 
