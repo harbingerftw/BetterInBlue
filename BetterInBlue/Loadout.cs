@@ -66,28 +66,39 @@ public class Loadout(string name = "Unnamed Loadout") {
         return UIState.Instance()->IsUnlockLinkUnlocked(link.RowId);
     }
 
-    public bool CanApply() {
+    /// Checks whether the loadout can be applied and returns a list of errors, if any.
+    /// <returns>
+    /// A list of errors why the loadout cannot be applied, or empty if it can be.
+    /// </returns>
+    public List<string> CanApply() {
+        List<string> errors = new List<string>();
         // Must be BLU to apply (id = 36)
-        if (Services.ClientState.LocalPlayer?.ClassJob.RowId != 36) return false;
+        if (!Plugin.IsBluMage())
+            errors.Add("You must be a Blue Mage.");
 
         // Can't apply in combat
-        if (Services.Condition[ConditionFlag.InCombat]) return false;
+        if (Services.Condition[ConditionFlag.InCombat])
+            errors.Add("You must not be in combat.");
 
         foreach (var action in this.Actions) {
             // No out of bounds indexing
-            if (action > Plugin.AozAction.Count) return false;
+            if (action > Plugin.AozAction.Count) {
+                errors.Add("Your loadout must not be invalid.");
+                break;
+            }
 
             if (action != 0) {
                 // Can't have two actions in the same loadout
-                if (this.ActionCount(action) > 1) return false;
+                if (this.ActionCount(action) > 1)
+                    errors.Add("You can not have duplicate actions.");
 
                 // Can't apply an action you don't have
-                if (!this.ActionUnlocked(action)) return false;
+                if (!this.ActionUnlocked(action))
+                    errors.Add("You must have every loadout action unlocked.");
             }
         }
 
-        // aight we good
-        return true;
+        return errors;
     }
 
     public unsafe bool Apply() {

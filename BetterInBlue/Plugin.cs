@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using BetterInBlue.Windows;
 using Dalamud.Game.Addon.Events;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Command;
 using Dalamud.Interface;
 using Dalamud.Interface.Textures.TextureWraps;
@@ -12,6 +13,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.Game;
+using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
@@ -39,6 +41,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     private static int SpellsOnBar;
     private static int TotalSpellsSelected;
+    private static List<uint> SelectedSpells = [];
     public readonly ConfigWindow ConfigWindow;
     public readonly MainWindow MainWindow;
 
@@ -46,6 +49,11 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     private TextButtonNode? openPluginWindow;
     private TextNode? spellsOnBarText;
+
+    public string Name => "Better in Blue";
+    public static NativeController NativeController { get; set; } = null!;
+    public static RaptureHotbarModule* RaptureHotbar { get; private set; }
+    public static AddonController<AddonAOZNotebook> BlueWindow { get; set; } = null!;
 
     public Plugin(IDalamudPluginInterface pluginInterface) {
         pluginInterface.Create<Services>();
@@ -101,12 +109,6 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         Services.Framework.Update += this.FrameworkUpdate;
     }
 
-    public string Name => "Better in Blue";
-    public static NativeController NativeController { get; set; } = null!;
-    public static RaptureHotbarModule* RaptureHotbar { get; private set; }
-
-    public static AddonController<AddonAOZNotebook> BlueWindow { get; set; } = null!;
-
     public void Dispose() {
         Services.ClientState.Login -= OnLogin;
         Services.ClientState.Logout -= OnLogout;
@@ -144,14 +146,13 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         BlueWindow.Disable();
     }
 
-    private List<uint> GetCurrentBluSpells() {
-        var result = new List<uint>();
+    private static void GetCurrentBluSpells(ref List<uint> spellList) {
+        spellList.Clear();
         for (var i = 0; i < 24; i++) {
             var id = ActionManager.Instance()->GetActiveBlueMageActionInSlot(i);
             if (id != 0)
-                result.Add(id);
+                spellList.Add(id);
         }
-        return result;
     }
 
     private void FrameworkUpdate(IFramework framework) {
@@ -159,10 +160,11 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         if (++Ticks < 5) return;
         Ticks = 0;
 
-        var selected = this.GetCurrentBluSpells();
-        TotalSpellsSelected = selected.Count;
+        GetCurrentBluSpells(ref SelectedSpells);
+        TotalSpellsSelected = SelectedSpells.Count;
 
         if (!SpellbookOpen) return;
+        var selected = new HashSet<uint>(SelectedSpells);
         for (uint hotbarNum = 0; hotbarNum < 17; hotbarNum++) {
             if (RaptureHotbar->IsHotbarShared(hotbarNum)) continue;
             var maxSlots = hotbarNum >= 10 ? 12 : 16;
@@ -225,7 +227,6 @@ public sealed unsafe class Plugin : IDalamudPlugin {
     }
 
     private void OnNodeUpdate(AddonAOZNotebook* addon) {
-        // Services.Log.Debug("OnNodeUpdate");
         if (this.spellsOnBarText is not null)
             this.spellsOnBarText.Text = $"({SpellsOnBar}/{TotalSpellsSelected} on hotbars)";
     }
@@ -298,5 +299,44 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         var res = AozAction.FirstOrNull(aoz => aoz.Action.RowId == id);
         if (res == null) throw new Exception("https://tenor.com/view/8032213");
         return res.Value.RowId;
+    }
+
+    public static bool AnyBluSpellOnCooldown() {
+        var actionManager = ActionManager.Instance();
+        foreach (var actionId in SelectedSpells) {
+            var group = actionManager->GetRecastGroup(1, actionId);
+            var detail = actionManager->GetRecastGroupDetail(group);
+            if (detail != null && detail->Elapsed > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // Mighty Guard; Aetheric Mimicry: Tank, DPS, Healer; Basic Instinct
+    public static readonly List<uint> PermanentBluStatuses = [1719, 2124, 2125, 2126, 2498];
+
+    public static bool AnyBluStatusActive() {
+        var player = Services.ClientState.LocalPlayer;
+        if (player?.StatusList == null) {
+            return false;
+        }
+        var character = (Character*) player.Address;
+        var statusManager = character->GetStatusManager();
+
+        for (var i = 0; i < statusManager->NumValidStatuses; i++) {
+            ref var status = ref statusManager->Status[i];
+            if (status.StatusId == 0) {
+                continue;
+            }
+            if (PermanentBluStatuses.Contains(status.StatusId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static bool IsBluMage() {
+        return Services.ClientState.LocalPlayer?.ClassJob.RowId == 36;
     }
 }

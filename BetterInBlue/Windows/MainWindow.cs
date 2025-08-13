@@ -27,7 +27,7 @@ public class MainWindow : Window, IDisposable {
 
         this.SizeCondition = ImGuiCond.FirstUseEver;
         this.SizeConstraints = new WindowSizeConstraints {
-            MinimumSize = new Vector2(400, 400),
+            MinimumSize = new Vector2(500, 400),
             MaximumSize = new Vector2(-1, -1)
         };
         this.Size = new Vector2(500, 400);
@@ -57,8 +57,6 @@ public class MainWindow : Window, IDisposable {
 
     private unsafe void DrawSidebar(Vector2 size) {
         if (ImGui.BeginChild("Sidebar", size, true)) {
-            var isBluMage = Services.ClientState.LocalPlayer?.ClassJob.RowId == 36;
-
             if (ImGuiComponents.IconButton(FontAwesomeIcon.Plus)) {
                 Plugin.Configuration.Loadouts.Add(
                     new Loadout($"Unnamed Loadout {Plugin.Configuration.Loadouts.Count + 1}"));
@@ -71,7 +69,7 @@ public class MainWindow : Window, IDisposable {
 
             if (UiHelpers.DisabledIconButtonWithTooltip(
                     FontAwesomeIcon.FileCirclePlus,
-                    !isBluMage,
+                    !Plugin.IsBluMage(),
                     "Create preset from current spell loadout and hotbars",
                     "Must be on Blue Mage to create loadout."
                 )) {
@@ -126,12 +124,19 @@ public class MainWindow : Window, IDisposable {
 
         var green = new Vector4(0.2f, 0.5f, 0.2f, 1);
 
+
         if (ImGui.BeginChild("Editor", size)) {
-            var canApply = this.selectedLoadout.CanApply();
+            var applyErrors = this.selectedLoadout.CanApply();
+            if (Plugin.AnyBluSpellOnCooldown())
+                applyErrors.Add("You must not have any spells on cooldown");
+
+            if (Plugin.AnyBluStatusActive())
+                applyErrors.Add("You must not have a spell effect active (aetheric mimicry etc.)");
+
             using (ImRaii.PushColor(ImGuiCol.Button, green)
                          .Push(ImGuiCol.ButtonActive, green)
                          .Push(ImGuiCol.ButtonHovered, green.Lighten(0.1f))) {
-                using (ImRaii.PushStyle(ImGuiStyleVar.Alpha, 0.5f, !canApply)) {
+                using (ImRaii.PushStyle(ImGuiStyleVar.Alpha, 0.5f, applyErrors.Count != 0)) {
                     if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Play, "Apply")) {
                         var worked = this.selectedLoadout.Apply();
                         if (!worked) {
@@ -144,17 +149,15 @@ public class MainWindow : Window, IDisposable {
                         }
                     }
                 }
-                var tooltip = canApply
-                                  ? "Apply the current loadout & saved hotbars."
-                                  : "You must meet all of the following conditions to apply:\n"
-                                    + "- You must be a Blue Mage.\n"
-                                    + "- You must not be in combat.\n"
-                                    + "- You must have every action in the loadout unlocked.\n"
-                                    + "- Your loadout must not be invalid (e.g. two of the same action or invalid action IDs).";
 
                 if (ImGui.IsItemHovered()) {
                     using (ImRaii.Tooltip()) {
-                        ImGui.TextUnformatted(tooltip);
+                        if (applyErrors.Count == 0)
+                            ImGui.Text("Apply the current loadout & saved hotbars.");
+                        else {
+                            ImGui.Text("You must meet all of the following conditions to apply:");
+                            applyErrors.ForEach((e) => ImGui.TextColored(KnownColor.Red.Vector(), $"- {e}"));
+                        }
                     }
                 }
             }
@@ -178,7 +181,7 @@ public class MainWindow : Window, IDisposable {
 
             ImGui.SameLine();
 
-            if (ImGuiComponents.IconButton(FontAwesomeIcon.Share)) {
+            if (ImGuiComponents.IconButton(FontAwesomeIcon.FileExport)) {
                 ImGui.SetClipboardText(this.selectedLoadout.ToPreset());
                 UiHelpers.ShowNotification("Copied loadout to clipboard (hotbars not included)\n" +
                                            "Consider sharing it in #preset-sharing in the Dalamud Discord server!");
@@ -212,7 +215,7 @@ public class MainWindow : Window, IDisposable {
             ImGui.Separator();
             ImGui.Dummy(new Vector2(0, 40));
 
-            var isBluMage = Services.ClientState.LocalPlayer?.ClassJob.RowId == 36;
+            var isBluMage = Plugin.IsBluMage();
 
             using (ImRaii.Disabled(!isBluMage || this.selectedLoadout.LoadoutHotbars.Count == 0)) {
                 if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.PlayCircle, "Apply Hotbars")) {
@@ -245,13 +248,22 @@ public class MainWindow : Window, IDisposable {
             if (bars.Count == 0)
                 ImGui.Text("None");
             else {
+                var maxWindowSize = ImGui.GetWindowContentRegionMax();
+
                 using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0, 0, 0, 1))
                              .Push(ImGuiCol.Button, color)
                              .Push(ImGuiCol.ButtonActive, color)
                              .Push(ImGuiCol.ButtonHovered, color)) {
                     foreach (var barStr in bars) {
+                        var startCursor = ImGui.GetCursorPos();
                         ImGui.SmallButton(barStr);
-                        ImGui.SameLine();
+                        var previousSize = ImGui.GetItemRectSize();
+
+                        if (maxWindowSize.X - (startCursor.X + previousSize.X) <= 120) {
+                            ImGui.SetCursorPos(new Vector2(0, ImGui.GetCursorPosY() + (previousSize.Y / 2.5f)));
+                        } else {
+                            ImGui.SameLine();
+                        }
                     }
                 }
             }
@@ -261,7 +273,7 @@ public class MainWindow : Window, IDisposable {
         }
     }
 
-    private unsafe void DrawDragDrop(List<Loadout> list, int index) {
+    private void DrawDragDrop(List<Loadout> list, int index) {
         const string dragDropLabel = "BlueLoadoutDragDrop";
 
         using (var target = ImRaii.DragDropTarget()) {
