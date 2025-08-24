@@ -126,12 +126,7 @@ public class MainWindow : Window, IDisposable {
 
 
         if (ImGui.BeginChild("Editor", size)) {
-            var applyErrors = this.selectedLoadout.CanApply();
-            if (Plugin.AnyBluSpellOnCooldown())
-                applyErrors.Add("You must not have any spells on cooldown");
-
-            if (Plugin.AnyBluStatusActive())
-                applyErrors.Add("You must not have a spell effect active (aetheric mimicry etc.)");
+            var applyErrors = this.selectedLoadout.GetLoadoutErrors();
 
             using (ImRaii.PushColor(ImGuiCol.Button, green)
                          .Push(ImGuiCol.ButtonActive, green)
@@ -183,7 +178,7 @@ public class MainWindow : Window, IDisposable {
 
             if (ImGuiComponents.IconButton(FontAwesomeIcon.FileExport)) {
                 ImGui.SetClipboardText(this.selectedLoadout.ToPreset());
-                UiHelpers.ShowNotification("Copied loadout to clipboard (hotbars not included)\n" +
+                UiHelpers.ShowNotification("Copied loadout to clipboard\n" +
                                            "Consider sharing it in #preset-sharing in the Dalamud Discord server!");
             }
 

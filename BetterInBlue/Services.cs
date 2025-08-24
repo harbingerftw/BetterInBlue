@@ -15,4 +15,5 @@ public class Services {
     [PluginService] public static ITextureProvider TextureProvider { get; set; } = null!;
     [PluginService] public static INotificationManager NotificationManager { get; set; } = null!;
     [PluginService] public static IPluginLog Log { get; set; } = null!;
+    [PluginService] public static IChatGui ChatGui { get; set; } = null!;
 }

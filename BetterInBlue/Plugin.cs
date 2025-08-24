@@ -272,10 +272,22 @@ public sealed unsafe class Plugin : IDalamudPlugin {
     }
 
     private static void ApplyLoadoutByName(List<string> args) {
-        var name = string.Join(" ", args).Trim();
+        var name = string.Join(" ", args).Trim().Trim('"', '\'');
+
         foreach (var loadout in Configuration.Loadouts)
-            if (loadout.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase))
-                loadout.Apply();
+            if (loadout.Name.Equals(name, StringComparison.CurrentCultureIgnoreCase)) {
+                var errors = loadout.GetLoadoutErrors();
+                if (errors.Count == 0) {
+                    loadout.Apply();
+                    UiHelpers.ShowNotification($"Loadout '{loadout.Name}' applied.");
+                    return;
+                }
+                Services.ChatGui.PrintError($"Could not apply loadout - {errors.FirstOrDefault()}",
+                                            Services.PluginInterface.InternalName, 705);
+                return;
+            }
+        Services.ChatGui.PrintError("Could not find loadout.",
+                                    Services.PluginInterface.InternalName, 705);
     }
 
     private void DrawUi() {

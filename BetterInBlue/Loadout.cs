@@ -72,7 +72,7 @@ public class Loadout(string name = "Unnamed Loadout") {
     /// <returns>
     /// A list of errors why the loadout cannot be applied, or empty if it can be.
     /// </returns>
-    public List<string> CanApply() {
+    public List<string> GetLoadoutErrors() {
         List<string> errors = new List<string>();
         // Must be BLU to apply (id = 36)
         if (!Plugin.IsBluMage())
@@ -81,6 +81,12 @@ public class Loadout(string name = "Unnamed Loadout") {
         // Can't apply in combat
         if (Services.Condition[ConditionFlag.InCombat])
             errors.Add("You must not be in combat.");
+        
+        if (Plugin.AnyBluSpellOnCooldown())
+            errors.Add("You must not have any spells on cooldown.");
+
+        if (Plugin.AnyBluStatusActive())
+            errors.Add("You must not have a spell effect active (aetheric mimicry etc.)");
 
         foreach (var action in this.Actions) {
             // No out of bounds indexing
@@ -109,6 +115,7 @@ public class Loadout(string name = "Unnamed Loadout") {
 
     public unsafe bool Apply() {
         var actionManager = ActionManager.Instance();
+        Services.Log.Verbose($"Applying loadout {this.Name}");
 
         var arr = new uint[24];
         for (var i = 0; i < 24; i++)
