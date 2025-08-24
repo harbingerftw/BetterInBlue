@@ -50,7 +50,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
     private TextButtonNode? openPluginWindow;
     private TextNode? spellsOnBarText;
 
-    public string Name => "Better in Blue";
+    public static string Name => "Better in Blue";
     public static NativeController NativeController { get; set; } = null!;
     public static RaptureHotbarModule* RaptureHotbar { get; private set; }
     public static AddonController<AddonAOZNotebook> BlueWindow { get; set; } = null!;
@@ -283,11 +283,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                     return;
                 }
                 Services.ChatGui.PrintError($"Could not apply loadout - {errors.FirstOrDefault()}",
-                                            Services.PluginInterface.InternalName, 705);
+                                            Name, 705);
                 return;
             }
-        Services.ChatGui.PrintError("Could not find loadout.",
-                                    Services.PluginInterface.InternalName, 705);
+        Services.ChatGui.PrintError("Could not find loadout.", Name, 705);
     }
 
     private void DrawUi() {
