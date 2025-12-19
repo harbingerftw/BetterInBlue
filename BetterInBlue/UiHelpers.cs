@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
 using Dalamud.Interface.Components;
@@ -51,5 +52,16 @@ public static class UiHelpers {
         list.RemoveAt(fromIndex);
         if (toIndex > fromIndex) toIndex--;
         list.Insert(toIndex, temp);
+    }
+}
+
+public static class ArrayExtensions {
+    public static int FullHash(this uint[] array) {
+        HashCode hashCode = default;
+
+        foreach (var t in array) {
+            hashCode.Add(EqualityComparer<uint>.Default.GetHashCode(t));
+        }
+        return hashCode.ToHashCode();
     }
 }
