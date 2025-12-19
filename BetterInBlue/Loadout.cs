@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -42,7 +43,7 @@ public class Loadout(string name = "Unnamed Loadout") {
             return obj;
         } catch (Exception e) {
             Services.Log.Warning("Failed to import loadout.");
-            Services.Log.Verbose(e.ToString());;
+            Services.Log.Warning(e.ToString());;
             return null;
         }
     }
@@ -123,7 +124,7 @@ public class Loadout(string name = "Unnamed Loadout") {
 
         fixed (uint* ptr = arr) {
             var ret = actionManager->SetBlueMageActions(ptr);
-            if (ret == false) return false;
+            if (!ret) return false;
         }
 
         this.ApplyToHotbars();

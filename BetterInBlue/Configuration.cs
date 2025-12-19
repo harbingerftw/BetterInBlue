@@ -11,6 +11,9 @@ public class Configuration : IPluginConfiguration {
     public List<Loadout> Loadouts = [];
     public bool SaveHotbarsCross = false;
     public bool SaveHotbarsStandard = true;
+    
+    public bool DoubleClickApply = true;
+    
     public int Version { get; set; } = 2;
 
     public void Save() {

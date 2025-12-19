@@ -106,8 +106,13 @@ public class MainWindow : Window, IDisposable {
 
             for (var index = 0; index < Plugin.Configuration.Loadouts.Count; index++) {
                 var loadout = Plugin.Configuration.Loadouts[index];
-                var label = loadout.Name + "##" + loadout.GetHashCode();
-                if (ImGui.Selectable(label, loadout == this.selectedLoadout)) this.selectedLoadout = loadout;
+                var label = $"{loadout.Name}##{loadout.GetHashCode()}";
+                if (ImGui.Selectable(label, loadout == this.selectedLoadout, ImGuiSelectableFlags.AllowDoubleClick)) {
+                    this.selectedLoadout = loadout;
+                    if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
+                        ApplyLoadout(loadout);
+                    }
+                }
                 DrawDragDrop(Plugin.Configuration.Loadouts, index);
             }
 
@@ -133,15 +138,7 @@ public class MainWindow : Window, IDisposable {
                          .Push(ImGuiCol.ButtonHovered, green.Lighten(0.1f))) {
                 using (ImRaii.PushStyle(ImGuiStyleVar.Alpha, 0.5f, applyErrors.Count != 0)) {
                     if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Play, "Apply")) {
-                        var worked = this.selectedLoadout.Apply();
-                        if (!worked) {
-                            UiHelpers.ShowNotification(
-                                "You should have gotten an error message on screen explaining why. If not, please report this!",
-                                "Failed to apply loadout",
-                                NotificationType.Error);
-                        } else {
-                            UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
-                        }
+                       ApplyLoadout(this.selectedLoadout);
                     }
                 }
 
@@ -285,7 +282,7 @@ public class MainWindow : Window, IDisposable {
         using (var source = ImRaii.DragDropSource()) {
             if (source) {
                 ImGui.Text($"Move {list[index].Name} here...");
-                if (ImGui.SetDragDropPayload(dragDropLabel, null, 0)) {
+                if (ImGui.SetDragDropPayload(dragDropLabel, null)) {
                     this.dragDropIndex = index;
                 }
             }
@@ -296,7 +293,8 @@ public class MainWindow : Window, IDisposable {
     private void DrawSpellSlot(int index) {
         if (this.selectedLoadout == null) return;
         var current = this.selectedLoadout.Actions[index];
-        var icon = Plugin.GetIcon(current);
+        var icon = Plugin.GetIcon(current)
+                   ?? Services.TextureProvider.GetFromGame("ui/uld/DragTargetA_hr1.tex").GetWrapOrEmpty();
 
         ImGui.Image(icon.Handle, new Vector2(48, 48));
         if (ImGui.IsItemHovered() && current != 0) {
@@ -328,7 +326,10 @@ public class MainWindow : Window, IDisposable {
                     if (listAction.RowId == 0) continue;
 
                     var listName = listAction.Action.Value.Name.ExtractText();
-                    var listIcon = Plugin.GetIcon(listAction.RowId);
+                    var listIcon = Plugin.GetIcon(listAction.RowId)
+                                   ?? Services.TextureProvider
+                                              .GetFromGame("ui/uld/DragTargetA_hr1.tex")
+                                              .GetWrapOrEmpty();
 
                     var validInt = int.TryParse(this.searchFilter, out _);
 
@@ -379,6 +380,20 @@ public class MainWindow : Window, IDisposable {
             }
 
             ImGui.EndPopup();
+        }
+    }
+    
+    private static void ApplyLoadout(Loadout loadout) {
+        // this does not check if applying will work!
+        // the game will not let you do invalid things, but it will still try
+        var worked = loadout.Apply();
+        if (!worked) {
+            UiHelpers.ShowNotification(
+                "You should have gotten an error message on screen explaining why. If not, please report this!",
+                "Failed to apply loadout",
+                NotificationType.Error);
+        } else {
+            UiHelpers.ShowNotification($"Loadout '{loadout.Name}' applied.");
         }
     }
 }

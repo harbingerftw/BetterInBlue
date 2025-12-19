@@ -96,5 +96,8 @@ public class ConfigWindow : Window, IDisposable {
 
         if (ImGui.Button("Import Game Presets")) Plugin.ImportGamePresets(true);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Imports all game presets and saved hotbars");
+
+        if (ImGui.Checkbox("Double Click Apply loadouts##db_apply", ref Plugin.Configuration.DoubleClickApply))
+            Plugin.Configuration.Save();
     }
 }
