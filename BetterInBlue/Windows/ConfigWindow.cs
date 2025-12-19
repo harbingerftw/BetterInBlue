@@ -91,13 +91,13 @@ public class ConfigWindow : Window, IDisposable {
             ImGui.Columns(1);
         }
         ImGui.Unindent();
-
-        ImGui.Dummy(new Vector2(0, 10));
-
+        ImGui.Separator();
+        ImGui.Dummy(new Vector2(0, 5));
+        
         if (ImGui.Button("Import Game Presets")) Plugin.ImportGamePresets(true);
         if (ImGui.IsItemHovered()) ImGui.SetTooltip("Imports all game presets and saved hotbars");
-
-        if (ImGui.Checkbox("Double Click Apply loadouts##db_apply", ref Plugin.Configuration.DoubleClickApply))
+        
+        if (ImGui.Checkbox("Double Click to apply loadouts##db_apply", ref Plugin.Configuration.DoubleClickApply))
             Plugin.Configuration.Save();
     }
 }

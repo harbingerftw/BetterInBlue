@@ -110,7 +110,19 @@ public class MainWindow : Window, IDisposable {
                 if (ImGui.Selectable(label, loadout == this.selectedLoadout, ImGuiSelectableFlags.AllowDoubleClick)) {
                     this.selectedLoadout = loadout;
                     if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
-                        ApplyLoadout(loadout);
+                        var errors = loadout.GetLoadoutErrors();
+                        if (errors.Count == 0) {
+                            if (this.selectedLoadout.Apply()) {
+                                UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
+                            } else
+                                UiHelpers.ShowNotification(
+                                    "You should have gotten an error message on screen explaining why. If not, please report this!",
+                                    "Failed to apply loadout",
+                                    NotificationType.Error);
+                        } else {
+                            Services.ChatGui.PrintError($"Could not apply loadout - {errors.FirstOrDefault()}",
+                                                        Plugin.Name, 705);
+                        }
                     }
                 }
                 DrawDragDrop(Plugin.Configuration.Loadouts, index);
@@ -138,7 +150,14 @@ public class MainWindow : Window, IDisposable {
                          .Push(ImGuiCol.ButtonHovered, green.Lighten(0.1f))) {
                 using (ImRaii.PushStyle(ImGuiStyleVar.Alpha, 0.5f, applyErrors.Count != 0)) {
                     if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Play, "Apply")) {
-                       ApplyLoadout(this.selectedLoadout);
+                        if (this.selectedLoadout.Apply()) {
+                            UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
+                        } else {
+                            UiHelpers.ShowNotification(
+                                "You should have gotten an error message on screen explaining why. If not, please report this!",
+                                "Failed to apply loadout",
+                                NotificationType.Error);
+                        }
                     }
                 }
 
@@ -380,20 +399,6 @@ public class MainWindow : Window, IDisposable {
             }
 
             ImGui.EndPopup();
-        }
-    }
-    
-    private static void ApplyLoadout(Loadout loadout) {
-        // this does not check if applying will work!
-        // the game will not let you do invalid things, but it will still try
-        var worked = loadout.Apply();
-        if (!worked) {
-            UiHelpers.ShowNotification(
-                "You should have gotten an error message on screen explaining why. If not, please report this!",
-                "Failed to apply loadout",
-                NotificationType.Error);
-        } else {
-            UiHelpers.ShowNotification($"Loadout '{loadout.Name}' applied.");
         }
     }
 }
