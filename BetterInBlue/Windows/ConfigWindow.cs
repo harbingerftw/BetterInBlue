@@ -91,5 +91,10 @@ public class ConfigWindow : Window, IDisposable {
             ImGui.Columns(1);
         }
         ImGui.Unindent();
+
+        ImGui.Dummy(new Vector2(0, 10));
+
+        if (ImGui.Button("Import Game Presets")) Plugin.ImportGamePresets(true);
+        if (ImGui.IsItemHovered()) ImGui.SetTooltip("Imports all game presets and saved hotbars");
     }
 }

@@ -131,6 +131,9 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     private static void OnLogin() {
         BlueWindow.Enable();
+        if (Configuration.Loadouts.Count == 0) {
+            ImportGamePresets();
+        }
     }
 
     private static void OnLogout(int type, int code) {
