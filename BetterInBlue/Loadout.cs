@@ -137,7 +137,7 @@ public class Loadout(string name = "Unnamed Loadout") {
             this.SaveHotbarSet(0, 10, 12, ref Plugin.Configuration.HotbarsStandard);
 
         if (Plugin.Configuration.SaveHotbarsCross)
-            this.SaveHotbarSet(10, 17, 16, ref Plugin.Configuration.HotbarsCross);
+            this.SaveHotbarSet(10, 18, 16, ref Plugin.Configuration.HotbarsCross);
     }
 
     private unsafe void SaveHotbarSet(uint start, uint end, uint maxSlots, ref bool[] enabled) {
@@ -147,7 +147,7 @@ public class Loadout(string name = "Unnamed Loadout") {
             if (!enabled[index]) continue;
             var hotbarToSave = new HotbarConfig(hotbarNum, new HotbarSlot[maxSlots]);
 
-            Services.Log.Verbose($"Saving hotbar {hotbarNum} ({index})");
+            Services.Log.Verbose($"Saving hotbar {hotbarNum + 1} ({index})");
 
             for (uint slotNum = 0; slotNum < maxSlots; slotNum++) {
                 var slot = Plugin.RaptureHotbar->GetSlotById(hotbarNum, slotNum);
@@ -169,7 +169,7 @@ public class Loadout(string name = "Unnamed Loadout") {
                     continue;
             }
 
-            Services.Log.Verbose($"Restoring hotbar {bar.Id}");
+            Services.Log.Verbose($"Restoring hotbar {bar.Id + 1}");
 
             for (uint slotId = 0; slotId < bar.MaxSlots; slotId++) {
                 Plugin.RaptureHotbar->SetAndSaveSlot(bar.Id,
