@@ -4,7 +4,9 @@ using System.Drawing;
 using System.Linq;
 using System.Numerics;
 using BetterInBlue.Windows;
+using Dalamud.Game.Addon.Lifecycle;
 using Dalamud.Game.Command;
+using Dalamud.Hooking;
 using Dalamud.Interface;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
@@ -14,11 +16,13 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 using KamiToolKit;
 using KamiToolKit.Classes.Controllers;
 using KamiToolKit.Nodes;
+using KamiToolKit.Extensions;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using Lumina.Extensions;
@@ -47,11 +51,14 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     private TextButtonNode? buttonOpenPlugin;
     private TextNode? textSpellsOnBar;
+    private SearchInput? searchInput;
 
     public static string Name => "Better in Blue";
     private const string CommandName = "/pblue";
     public static RaptureHotbarModule* RaptureHotbar { get; private set; }
     public static AddonController<AddonAOZNotebook> BlueWindow { get; set; } = null!;
+    public static AgentInterface* Agent { get; set; } = null!;
+    public static Hook<AgentInterface.Delegates.ReceiveEvent>? ReceiveEventHook { get; set; }
 
     public Plugin(IDalamudPluginInterface pluginInterface) {
         pluginInterface.Create<Services>();
@@ -100,14 +107,63 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 //         // this.ConfigWindow.IsOpen = true;
 // #endif
 
+        // Services.AddonLifecycle.LogAddon("AOZNotebook", AddonEvent.PreReceiveEvent);
+        Services.AddonLifecycle.LogAddon("AOZNotebookFilterSettings", AddonEvent.PreReceiveEvent,
+                                         AddonEvent.PostReceiveEvent);
+
+        Agent = AgentModule.Instance()->GetAgentByInternalId(AgentId.AozNotebook);
+        ReceiveEventHook = Services.GIP.HookFromAddress<AgentInterface.Delegates.ReceiveEvent>(
+            Agent->VirtualTable->ReceiveEvent, AgentReceiveEvent);
+
+        if (ReceiveEventHook.Address != nint.Zero) {
+            ReceiveEventHook.Enable();
+            Services.Log.Info("Hooked AOZNotebook ReceiveEvent");
+        } else {
+            Services.Log.Error("Failed to hook AOZNotebook ReceiveEvent");
+        }
+
+        // Agent->LogAgent(new LoggedAgentEvents {SuppressedEventKinds = [0, 1]});
+
+        var vals = Enum.GetValues<NotebookFilterFlags>();
+
+        foreach (var val in vals) {
+            Services.Log.Info($"{val.ToString()} {(int) val}");
+        }
+
         Services.ClientState.Login += OnLogin;
         Services.ClientState.Logout += OnLogout;
         Services.Framework.Update += this.FrameworkUpdate;
     }
 
+    public static List<ulong> SuppressedEventKinds { get; set; } = [0];
+
+    private static AtkValue* AgentReceiveEvent(
+        AgentInterface* thisPtr, AtkValue* returnValue, AtkValue* values, uint valueCount, ulong eventKind
+    ) {
+        Services.Log.Info("Enter hook");
+        try {
+            var valueSpan = new Span<AtkValue>(values, (int) valueCount);
+            if (!SuppressedEventKinds.Contains(eventKind)) {
+                Services.Log.Info($"[{(nint) thisPtr:X}]: {eventKind}");
+                valueSpan.PrintValues(2);
+            }
+        } catch (Exception e) {
+            Services.Log.Error(e, "Exception in AgentReceiveEvent Logging Method");
+        }
+
+
+        return ReceiveEventHook!.Original(thisPtr, returnValue, values, valueCount, eventKind);
+    }
+
     public void Dispose() {
         Services.ClientState.Login -= OnLogin;
         Services.ClientState.Logout -= OnLogout;
+
+        // Services.AddonLifecycle.UnLogAddon("AOZNotebook");
+        Services.AddonLifecycle.UnLogAddon("AOZNotebookFilterSettings");
+
+        // Agent->UnLogAgent();
+        ReceiveEventHook?.Dispose();
 
         Services.Framework.Update -= this.FrameworkUpdate;
 
@@ -178,13 +234,57 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         SpellbookOpen = true;
 
         const int padding = 24;
-
+        const int adjustedDown = 30;
         var spellNode = addon->GetNodeById(34);
         var buttonsNode = addon->GetNodeById(40);
         var spellsUsedCounter = addon->GetNodeById(37);
 
+        //
+        // foreach (var node in addon->WindowNode->Component->UldManager.Nodes) {
+        //     Services.Log.Debug($"Node ID: {node.Value->NodeId}, Name: {node.Value->Type}");
+        // }
+        var nodeActiveSpellBg = addon->WindowNode->Component->UldManager.SearchNodeById(15);
+        var nodePageL = addon->WindowNode->Component->UldManager.SearchNodeById(20);
+        var nodePageR = addon->WindowNode->Component->UldManager.SearchNodeById(21);
+        var collisionActiveSpells = addon->WindowNode->Component->UldManager.SearchNodeById(23);
+        var collisionBook = addon->WindowNode->Component->UldManager.SearchNodeById(25);
+
+        if (nodePageL is null || nodePageR is null || nodeActiveSpellBg is null || collisionActiveSpells is null ||
+            collisionBook is null || spellNode is null || buttonsNode is null || spellsUsedCounter is null) {
+            Services.Log.Error("Failed to find nodes for Better in Blue");
+            return;
+        }
+        nodeActiveSpellBg->SetPositionFloat(nodeActiveSpellBg->X, nodeActiveSpellBg->Y + adjustedDown);
+        collisionActiveSpells->SetPositionFloat(collisionActiveSpells->X, collisionActiveSpells->Y + adjustedDown);
+        spellNode->SetPositionFloat(spellNode->X, spellNode->Y + adjustedDown);
+        var pageHeight = (ushort) (nodePageR->GetHeight() + adjustedDown);
+        nodePageL->SetHeight(pageHeight);
+        nodePageR->SetHeight(pageHeight);
+        collisionBook->SetHeight(pageHeight);
+
+        var nodeResults = addon->GetNodeById(35);
+        var nodeSpellDetails = addon->GetNodeById(36);
+
+        var width = stackalloc short[1];
+        var height = stackalloc short[1];
+
+        addon->GetSize(width, height, false);
+        height[0] += 50;
+
+        Services.Log.Info($"{height[0]}, {width[0]}");
+
+        addon->SetSize((ushort) *height, (ushort) *width);
+
         buttonsNode->SetPositionFloat((spellNode->Width - ((144 * 3) + (padding * 2))) / 2f, 148);
         spellsUsedCounter->SetPositionFloat(spellsUsedCounter->X - 185f, spellsUsedCounter->Y);
+
+        this.searchInput = new SearchInput {
+            Position = new Vector2(50, 50),
+            Size = new Vector2(300f, 28.0f),
+            OnInputReceived = searchString => OnBarSearch(addon, searchString.ToString()),
+        };
+
+        this.searchInput.AttachNode((AtkUnitBase*) addon);
 
         if (spellNode is not null) {
             this.buttonOpenPlugin = new TextButtonNode {
@@ -194,10 +294,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                 NodeFlags = NodeFlags.AnchorTop | NodeFlags.AnchorLeft | NodeFlags.Visible | NodeFlags.Enabled |
                             NodeFlags.EmitsEvents,
                 String = "Load Even More",
-                Tooltip = "Added by Better in Blue"
+                Tooltip = "Added by Better in Blue",
+                AddColor = new Vector3 {Z = 0.2f}, //slight blue tint
             };
             this.buttonOpenPlugin.BackgroundNode.PartsList[0]->UldAsset->AtkTexture.LoadTexture("ui/uld/ButtonA.tex");
-            this.buttonOpenPlugin.AddColor = new Vector3 {Z = 0.2f}; //slight blue tint
 
             this.buttonOpenPlugin.AddEvent(AtkEventType.MouseClick, () => this.MainWindow.Toggle());
             this.buttonOpenPlugin.AttachNode(spellNode);
@@ -219,6 +319,26 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         }
     }
 
+    private void OnBarSearch(AddonAOZNotebook* addon, string searchString) {
+        Services.Log.Info($"Searching for '{searchString}'");
+        try {
+            SendAgentFilter();
+        } catch (Exception e) {
+            Services.Log.Error(e, "Exception in OnBarSearch");
+        }
+    }
+
+    private bool SendAgentFilter() {
+        using var returnValue = new AtkValue();
+        var command = stackalloc AtkValue[3];
+        command[0].SetInt(0);
+        command[1].SetInt((int) NotebookFilterFlags.Star1);
+        command[2].SetManagedString("Water");
+
+        Agent->ReceiveEvent(&returnValue, command, (uint) 3, 2);
+        return false;
+    }
+
     private void OnNodeUpdate(AddonAOZNotebook* addon) {
         if (this.textSpellsOnBar is not null)
             this.textSpellsOnBar.String = $"({SpellsOnBar}/{TotalSpellsSelected} on hotbars)";
@@ -230,6 +350,9 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
         this.textSpellsOnBar?.Dispose();
         this.textSpellsOnBar = null;
+
+        this.searchInput?.Dispose();
+        this.searchInput = null;
 
         SpellbookOpen = false;
     }
