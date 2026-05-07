@@ -81,7 +81,6 @@ public unsafe class SpellbookModifications : IDisposable {
         addon->GetSize(width, height, false);
         height[0] += 60;
         addon->SetSize(width: *height, height: *width);
-        Services.Log.Info($"addon size: {height[0]}, {width[0]}");
 
         if (*height <= 740) {
             nodeActiveSpellBg->SetPositionFloat(nodeActiveSpellBg->X, nodeActiveSpellBg->Y + adjustedDown);

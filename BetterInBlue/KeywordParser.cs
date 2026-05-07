@@ -46,8 +46,6 @@ public static class KeywordParser {
                 var strings = g.Select(x => x.Attribute?.Name ?? x.Flag.GetDisplay()).ToArray();
                 Groups[k] = new KeywordGroup(k, flags, strings);
             }
-
-            Services.Log.Debug($"Registered group: {group.Key} -> {group.Count()}");
         }
     }
 

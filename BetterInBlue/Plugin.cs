@@ -129,7 +129,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
 
     public void SendAgentFilter(string search, NotebookFilterFlags flags) {
-        Services.Log.Info($"Sending Filter to Agent: '{search}' with '{flags}'");
+        Services.Log.Verbose($"Sending Filter to Agent: '{search}' with '{flags}'");
         using var returnValue = new RentedAtkValues(1);
         using var command = new RentedAtkValues(3);
 
