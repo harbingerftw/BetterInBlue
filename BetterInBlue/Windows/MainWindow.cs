@@ -5,6 +5,7 @@ using System.Linq;
 using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface;
+using Dalamud.Interface.Colors;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility.Raii;
@@ -25,31 +26,32 @@ public class MainWindow : Window, IDisposable {
     public MainWindow(Plugin plugin) : base("Better in Blue") {
         this.plugin = plugin;
 
-        this.SizeCondition = ImGuiCond.FirstUseEver;
-        this.SizeConstraints = new WindowSizeConstraints {
+        SizeCondition = ImGuiCond.FirstUseEver;
+        SizeConstraints = new WindowSizeConstraints {
             MinimumSize = new Vector2(500, 400),
             MaximumSize = new Vector2(-1, -1)
         };
-        this.Size = new Vector2(500, 400);
+        Size = new Vector2(500, 400);
     }
 
-    public void Dispose() { }
+    public void Dispose() {
+    }
 
     public override void Draw() {
         var cra = ImGui.GetContentRegionAvail();
-        var sidebar = cra with {X = Math.Max(cra.X * 0.25f, 200f)};
-        var editor = cra with {X = cra.X * 0.75f};
+        var sidebar = cra with { X = Math.Max(cra.X * 0.25f, 200f) };
+        var editor = cra with { X = cra.X * 0.75f };
 
-        this.DrawSidebar(sidebar);
+        DrawSidebar(sidebar);
         ImGui.SameLine();
-        this.DrawEditor(editor);
+        DrawEditor(editor);
 
-        if (this.shouldOpen) {
+        if (shouldOpen) {
             ImGui.OpenPopup("ActionContextMenu");
-            this.shouldOpen = false;
+            shouldOpen = false;
         }
 
-        this.DrawContextMenu();
+        DrawContextMenu();
 
         endDropAction?.Invoke();
         endDropAction = null;
@@ -89,7 +91,8 @@ public class MainWindow : Window, IDisposable {
                 if (maybeLoadout != null) {
                     Plugin.Configuration.Loadouts.Add(maybeLoadout);
                     Plugin.Configuration.Save();
-                } else
+                }
+                else
                     UiHelpers.ShowNotification("Failed to load preset from clipboard.", type: NotificationType.Error);
             }
 
@@ -97,9 +100,11 @@ public class MainWindow : Window, IDisposable {
             ImGui.SameLine();
 
             ImGui.SetCursorPos(new Vector2(ImGui.GetWindowContentRegionMax().X - ImGui.GetFrameHeight(),
-                                           ImGui.GetCursorPosY()));
+                ImGui.GetCursorPosY()));
 
-            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog)) this.plugin.OpenConfigUi();
+            if (ImGuiComponents.IconButton(FontAwesomeIcon.Cog)) {
+                plugin.OpenConfigUi();
+            }
 
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Open the config window.");
             ImGui.Separator();
@@ -107,24 +112,27 @@ public class MainWindow : Window, IDisposable {
             for (var index = 0; index < Plugin.Configuration.Loadouts.Count; index++) {
                 var loadout = Plugin.Configuration.Loadouts[index];
                 var label = $"{loadout.Name}##{loadout.GetHashCode()}";
-                if (ImGui.Selectable(label, loadout == this.selectedLoadout, ImGuiSelectableFlags.AllowDoubleClick)) {
-                    this.selectedLoadout = loadout;
+                if (ImGui.Selectable(label, loadout == selectedLoadout, ImGuiSelectableFlags.AllowDoubleClick)) {
+                    selectedLoadout = loadout;
                     if (ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left)) {
                         var errors = loadout.GetLoadoutErrors();
                         if (errors.Count == 0) {
-                            if (this.selectedLoadout.Apply()) {
-                                UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
-                            } else
+                            if (selectedLoadout.Apply()) {
+                                UiHelpers.ShowNotification($"Loadout '{selectedLoadout.Name}' applied.");
+                            }
+                            else
                                 UiHelpers.ShowNotification(
                                     "You should have gotten an error message on screen explaining why. If not, please report this!",
                                     "Failed to apply loadout",
                                     NotificationType.Error);
-                        } else {
+                        }
+                        else {
                             Services.ChatGui.PrintError($"Could not apply loadout - {errors.FirstOrDefault()}",
-                                                        Plugin.Name, 705);
+                                Plugin.Name, 705);
                         }
                     }
                 }
+
                 DrawDragDrop(Plugin.Configuration.Loadouts, index);
             }
 
@@ -133,9 +141,9 @@ public class MainWindow : Window, IDisposable {
     }
 
     private void DrawEditor(Vector2 size) {
-        if (this.selectedLoadout == null) {
+        if (selectedLoadout == null) {
             var first = Plugin.Configuration.Loadouts.FirstOrDefault();
-            if (first != null) this.selectedLoadout = first;
+            if (first != null) selectedLoadout = first;
             else return;
         }
 
@@ -143,16 +151,17 @@ public class MainWindow : Window, IDisposable {
 
 
         if (ImGui.BeginChild("Editor", size)) {
-            var applyErrors = this.selectedLoadout.GetLoadoutErrors();
+            var applyErrors = selectedLoadout.GetLoadoutErrors();
 
             using (ImRaii.PushColor(ImGuiCol.Button, green)
-                         .Push(ImGuiCol.ButtonActive, green)
-                         .Push(ImGuiCol.ButtonHovered, green.Lighten(0.1f))) {
+                       .Push(ImGuiCol.ButtonActive, green)
+                       .Push(ImGuiCol.ButtonHovered, green.Lighten(0.1f))) {
                 using (ImRaii.PushStyle(ImGuiStyleVar.Alpha, 0.5f, applyErrors.Count != 0)) {
                     if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Play, "Apply")) {
-                        if (this.selectedLoadout.Apply()) {
-                            UiHelpers.ShowNotification($"Loadout '{this.selectedLoadout.Name}' applied.");
-                        } else {
+                        if (selectedLoadout.Apply()) {
+                            UiHelpers.ShowNotification($"Loadout '{selectedLoadout.Name}' applied.");
+                        }
+                        else {
                             UiHelpers.ShowNotification(
                                 "You should have gotten an error message on screen explaining why. If not, please report this!",
                                 "Failed to apply loadout",
@@ -182,10 +191,10 @@ public class MainWindow : Window, IDisposable {
                     "Delete Loadout (you can't undo this!)",
                     "Delete Loadout. Hold Ctrl to enable the delete button."
                 )) {
-                Plugin.Configuration.Loadouts.Remove(this.selectedLoadout);
+                Plugin.Configuration.Loadouts.Remove(selectedLoadout);
                 Plugin.Configuration.Save();
 
-                this.selectedLoadout = null;
+                selectedLoadout = null;
                 ImGui.EndChild();
                 return;
             }
@@ -193,7 +202,7 @@ public class MainWindow : Window, IDisposable {
             ImGui.SameLine();
 
             if (ImGuiComponents.IconButton(FontAwesomeIcon.FileExport)) {
-                ImGui.SetClipboardText(this.selectedLoadout.ToPreset());
+                ImGui.SetClipboardText(selectedLoadout.ToPreset());
                 UiHelpers.ShowNotification("Copied loadout to clipboard\n" +
                                            "Consider sharing it in #preset-sharing in the Dalamud Discord server!");
             }
@@ -202,23 +211,23 @@ public class MainWindow : Window, IDisposable {
 
             ImGui.Dummy(new Vector2(0, 10));
             // Can't ref the damn name, I hate getter/setters
-            var name = this.selectedLoadout.Name;
+            var name = selectedLoadout.Name;
             if (ImGui.InputText("Name", ref name, 256)) {
-                this.selectedLoadout.Name = name;
+                selectedLoadout.Name = name;
                 Plugin.Configuration.Save();
             }
 
             ImGui.Separator();
 
             for (var i = 0; i < 12; i++) {
-                this.DrawSpellSlot(i);
+                DrawSpellSlot(i);
                 ImGui.SameLine();
             }
 
             ImGui.NewLine();
 
             for (var i = 12; i < 24; i++) {
-                this.DrawSpellSlot(i);
+                DrawSpellSlot(i);
                 ImGui.SameLine();
             }
 
@@ -228,23 +237,25 @@ public class MainWindow : Window, IDisposable {
 
             var isBluMage = Plugin.IsBluMage();
 
-            using (ImRaii.Disabled(!isBluMage || this.selectedLoadout.LoadoutHotbars.Count == 0)) {
+            using (ImRaii.Disabled(!isBluMage || selectedLoadout.LoadoutHotbars.Count == 0)) {
                 if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.PlayCircle, "Apply Hotbars")) {
-                    this.selectedLoadout.ApplyToHotbars();
-                    UiHelpers.ShowNotification($"Hotbars from '{this.selectedLoadout.Name}' applied.");
+                    selectedLoadout.ApplyToHotbars();
+                    UiHelpers.ShowNotification($"Hotbars from '{selectedLoadout.Name}' applied.");
                 }
             }
+
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Apply the hotbars in this preset to your current hotbars.");
 
             ImGui.SameLine();
 
             using (ImRaii.Disabled(!isBluMage))
                 if (ImGuiComponents.IconButtonWithText(FontAwesomeIcon.Sync, "Updated Saved Hotbars")) {
-                    this.selectedLoadout.LoadoutHotbars.Clear();
-                    this.selectedLoadout.SaveHotbars();
-                    UiHelpers.ShowNotification($"Hotbars saved to preset '{this.selectedLoadout.Name}'.");
+                    selectedLoadout.LoadoutHotbars.Clear();
+                    selectedLoadout.SaveHotbars();
+                    UiHelpers.ShowNotification($"Hotbars saved to preset '{selectedLoadout.Name}'.");
                     Plugin.Configuration.Save();
                 }
+
             if (ImGui.IsItemHovered()) ImGui.SetTooltip("Save your current hotbars to this loadout.");
 
             ImGui.Dummy(new Vector2(0, 10));
@@ -252,9 +263,9 @@ public class MainWindow : Window, IDisposable {
             ImGui.SameLine();
 
             var bars =
-                this.selectedLoadout.LoadoutHotbars.Select(x => x.Id >= 10
-                                                                    ? $"Cross Hotbar {x.Id - 9}"
-                                                                    : $"Hotbar {x.Id + 1}").ToList();
+                selectedLoadout.LoadoutHotbars.Select(x => x.Id >= 10
+                    ? $"Cross Hotbar {x.Id - 9}"
+                    : $"Hotbar {x.Id + 1}").ToList();
             var color = KnownColor.LightGray.Vector();
             if (bars.Count == 0)
                 ImGui.Text("None");
@@ -262,9 +273,9 @@ public class MainWindow : Window, IDisposable {
                 var maxWindowSize = ImGui.GetWindowContentRegionMax();
 
                 using (ImRaii.PushColor(ImGuiCol.Text, new Vector4(0, 0, 0, 1))
-                             .Push(ImGuiCol.Button, color)
-                             .Push(ImGuiCol.ButtonActive, color)
-                             .Push(ImGuiCol.ButtonHovered, color)) {
+                           .Push(ImGuiCol.Button, color)
+                           .Push(ImGuiCol.ButtonActive, color)
+                           .Push(ImGuiCol.ButtonHovered, color)) {
                     foreach (var barStr in bars) {
                         var startCursor = ImGui.GetCursorPos();
                         ImGui.SmallButton(barStr);
@@ -272,7 +283,8 @@ public class MainWindow : Window, IDisposable {
 
                         if (maxWindowSize.X - (startCursor.X + previousSize.X) <= 120) {
                             ImGui.SetCursorPos(new Vector2(0, ImGui.GetCursorPosY() + (previousSize.Y / 2.5f)));
-                        } else {
+                        }
+                        else {
                             ImGui.SameLine();
                         }
                     }
@@ -291,9 +303,10 @@ public class MainWindow : Window, IDisposable {
             if (target.Success && !ImGui.AcceptDragDropPayload(dragDropLabel).IsNull) {
                 if (dragDropIndex >= 0) {
                     var i = dragDropIndex;
-                    this.endDropAction = () => list.Move(i, index);
+                    endDropAction = () => list.Move(i, index);
                 }
-                this.dragDropIndex = -1;
+
+                dragDropIndex = -1;
             }
         }
 
@@ -302,7 +315,7 @@ public class MainWindow : Window, IDisposable {
             if (source) {
                 ImGui.Text($"Move {list[index].Name} here...");
                 if (ImGui.SetDragDropPayload(dragDropLabel, null)) {
-                    this.dragDropIndex = index;
+                    dragDropIndex = index;
                 }
             }
         }
@@ -310,8 +323,8 @@ public class MainWindow : Window, IDisposable {
 
 
     private void DrawSpellSlot(int index) {
-        if (this.selectedLoadout == null) return;
-        var current = this.selectedLoadout.Actions[index];
+        if (selectedLoadout == null) return;
+        var current = selectedLoadout.Actions[index];
         var icon = Plugin.GetIcon(current)
                    ?? Services.TextureProvider.GetFromGame("ui/uld/DragTargetA_hr1.tex").GetWrapOrEmpty();
 
@@ -320,17 +333,18 @@ public class MainWindow : Window, IDisposable {
             var action = Plugin.AozToNormal(current);
             ImGui.SetTooltip($"{Plugin.Action.GetRow(action).Name.ExtractText()} (#{current})" +
                              $"\n\n(Left click to change action; right click to remove)");
-        } else if (ImGui.IsItemHovered()) ImGui.SetTooltip("Left click to add action.");
+        }
+        else if (ImGui.IsItemHovered()) ImGui.SetTooltip("Left click to add action.");
 
         if (ImGui.IsItemClicked(ImGuiMouseButton.Left)) {
-            this.editing = index;
-            this.searchFilter = string.Empty;
+            editing = index;
+            searchFilter = string.Empty;
             // Why does OpenPopup not work here? I dunno!
-            this.shouldOpen = true;
+            shouldOpen = true;
         }
 
         if (ImGui.IsItemClicked(ImGuiMouseButton.Right)) {
-            this.selectedLoadout.Actions[index] = 0;
+            selectedLoadout.Actions[index] = 0;
             Plugin.Configuration.Save();
         }
     }
@@ -338,24 +352,27 @@ public class MainWindow : Window, IDisposable {
     private void DrawContextMenu() {
         if (ImGui.BeginPopup("ActionContextMenu")) {
             ImGui.SetNextItemWidth(-1);
-            ImGui.InputTextWithHint("##Search", "Search...", ref this.searchFilter, 256);
+            ImGui.InputTextWithHint("##Search", "Search...", ref searchFilter, 256);
 
             if (ImGui.BeginChild("ActionList", new Vector2(340, 256))) {
-                foreach (var listAction in Plugin.AozAction) {
-                    if (listAction.RowId == 0) continue;
+                foreach (var actionTransient in Plugin.AozActionTransient.OrderBy(x => x.Number)) {
+                    if (actionTransient.RowId == 0) continue;
+                    var action = Plugin.Action.GetRow(actionTransient.RowId);
+                    var aozAction = Plugin.AozAction.GetRow(actionTransient.RowId);
 
-                    var listName = listAction.Action.Value.Name.ExtractText();
-                    var listIcon = Plugin.GetIcon(listAction.RowId)
+                    var listName = aozAction.Action.Value.Name.ToString();
+                    var listId = actionTransient.Number;
+                    var listIcon = Plugin.GetIcon(action.RowId)
                                    ?? Services.TextureProvider
-                                              .GetFromGame("ui/uld/DragTargetA_hr1.tex")
-                                              .GetWrapOrEmpty();
+                                       .GetFromGame("ui/uld/DragTargetA_hr1.tex")
+                                       .GetWrapOrEmpty();
 
-                    var validInt = int.TryParse(this.searchFilter, out _);
+                    var validInt = int.TryParse(searchFilter, out _);
 
-                    var meetsSearchFilter = string.IsNullOrEmpty(this.searchFilter)
-                                            || (validInt && listAction.RowId.ToString().StartsWith(this.searchFilter))
-                                            || listName.Contains(this.searchFilter,
-                                                                 StringComparison.CurrentCultureIgnoreCase);
+                    var meetsSearchFilter = string.IsNullOrEmpty(searchFilter)
+                                            || (validInt && listId.ToString().StartsWith(searchFilter))
+                                            || listName.Contains(searchFilter,
+                                                StringComparison.CurrentCultureIgnoreCase);
                     if (!meetsSearchFilter) continue;
 
                     var rowHeight = ImGui.GetTextLineHeightWithSpacing();
@@ -363,16 +380,16 @@ public class MainWindow : Window, IDisposable {
                     ImGui.Image(listIcon.Handle, new Vector2(rowHeight, rowHeight));
                     ImGui.SameLine();
 
-                    var tooManyOfAction = this.selectedLoadout!.ActionCount(listAction.RowId) > 0;
-                    var notUnlocked = !this.selectedLoadout!.ActionUnlocked(listAction.RowId);
+                    var tooManyOfAction = selectedLoadout!.ActionCount(action.RowId) > 0;
+                    var notUnlocked = !selectedLoadout!.ActionUnlocked(action.RowId);
 
                     var locked = tooManyOfAction || notUnlocked;
                     var flags = locked
-                                    ? ImGuiSelectableFlags.Disabled
-                                    : ImGuiSelectableFlags.None;
-
-                    if (ImGui.Selectable($"{listName} #{listAction.RowId}", false, flags)) {
-                        this.selectedLoadout!.Actions[this.editing] = listAction.RowId;
+                        ? ImGuiSelectableFlags.Disabled
+                        : ImGuiSelectableFlags.None;
+                    // var act = Plugin.AozActionTransient.GetRow(action.RowId);
+                    if (ImGui.Selectable($"{listName} #{listId}", false, flags)) {
+                        selectedLoadout!.Actions[editing] = action.RowId;
                         Plugin.Configuration.Save();
                         ImGui.CloseCurrentPopup();
                     }
@@ -380,7 +397,11 @@ public class MainWindow : Window, IDisposable {
                     // Can't hover a disabled Selectable, other UI element it is then
                     if (locked) {
                         ImGui.SameLine();
-                        ImGui.TextUnformatted("(?)");
+                        {
+                            using var icon = ImRaii.PushFont(UiBuilder.IconFont);
+                            using var color = ImRaii.PushColor(ImGuiCol.Text, ImGuiColors.DalamudOrange);
+                            ImGui.TextUnformatted(FontAwesomeIcon.ExclamationTriangle.ToIconString());
+                        }
                         if (ImGui.IsItemHovered()) {
                             var str = "Issues:\n";
 

@@ -1,27 +1,23 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Linq;
-using System.Numerics;
+using BetterInBlue.Native;
 using BetterInBlue.Windows;
 using Dalamud.Game.Command;
-using Dalamud.Interface;
+using Dalamud.Hooking;
 using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
-using Dalamud.Plugin.Services;
-using FFXIVClientStructs.FFXIV.Client.Game;
+using Dalamud.Utility;
 using FFXIVClientStructs.FFXIV.Client.Game.Character;
 using FFXIVClientStructs.FFXIV.Client.System.Framework;
-using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
-using FFXIVClientStructs.FFXIV.Component.GUI;
-using KamiToolKit;
-using KamiToolKit.Classes.Controllers;
-using KamiToolKit.Nodes;
+using FFXIVClientStructs.Interop;
 using Lumina.Excel;
 using Lumina.Excel.Sheets;
 using Lumina.Extensions;
+using Lumina.Text.ReadOnly;
 using static FFXIVClientStructs.FFXIV.Client.UI.Misc.RaptureHotbarModule;
 using Action = Lumina.Excel.Sheets.Action;
 
@@ -33,34 +29,24 @@ public sealed unsafe class Plugin : IDalamudPlugin {
     public static ExcelSheet<Action> Action = null!;
     public static ExcelSheet<AozAction> AozAction = null!;
     public static ExcelSheet<AozActionTransient> AozActionTransient = null!;
-    private static int Ticks;
-
-    private static bool SpellbookOpen;
-
-    private static int SpellsOnBar;
-    private static int TotalSpellsSelected;
-    private static List<uint> SelectedSpells = [];
     public readonly ConfigWindow ConfigWindow;
     public readonly MainWindow MainWindow;
 
     public readonly WindowSystem WindowSystem = new("BetterInBlue");
 
-    private TextButtonNode? buttonOpenPlugin;
-    private TextNode? textSpellsOnBar;
-
     public static string Name => "Better in Blue";
     private const string CommandName = "/pblue";
     public static RaptureHotbarModule* RaptureHotbar { get; private set; }
-    public static AddonController<AddonAOZNotebook> BlueWindow { get; set; } = null!;
+
+    public static AgentInterface* Agent { get; set; } = null!;
+    public static Hook<AgentInterface.Delegates.ReceiveEvent>? ReceiveEventHook { get; set; }
+
+    public static SpellbookModifications Spellbook = null!;
 
     public Plugin(IDalamudPluginInterface pluginInterface) {
         pluginInterface.Create<Services>();
-        KamiToolKitLibrary.Initialize(Services.PluginInterface);
-        BlueWindow = new AddonController<AddonAOZNotebook>("AOZNotebook");
-        BlueWindow.OnAttach += this.AttachNode;
-        BlueWindow.OnDetach += this.DetachNodes;
-        BlueWindow.OnRefresh += this.OnNodeUpdate;
-        BlueWindow.OnUpdate += this.OnNodeUpdate;
+
+        Spellbook = new SpellbookModifications(this);
 
         RaptureHotbar = Framework.Instance()->UIModule->GetRaptureHotbarModule();
 
@@ -71,23 +57,23 @@ public sealed unsafe class Plugin : IDalamudPlugin {
             Configuration.Save();
         } else Configuration = tempConfig;
 
-        this.MainWindow = new MainWindow(this);
-        this.ConfigWindow = new ConfigWindow(this);
+        MainWindow = new MainWindow(this);
+        ConfigWindow = new ConfigWindow(this);
 
-        this.WindowSystem.AddWindow(this.MainWindow);
-        this.WindowSystem.AddWindow(this.ConfigWindow);
+        WindowSystem.AddWindow(MainWindow);
+        WindowSystem.AddWindow(ConfigWindow);
 
-        Services.PluginInterface.UiBuilder.OpenMainUi += this.ToggleMainWindow;
-        Services.PluginInterface.UiBuilder.OpenConfigUi += this.ToggleConfigWindow;
+        Services.PluginInterface.UiBuilder.OpenMainUi += ToggleMainWindow;
+        Services.PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigWindow;
 
         // Adds another button that is doing the same but for the main ui of the plugin
 
-        Services.CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommandInternal) {
+        Services.CommandManager.AddHandler(CommandName, new CommandInfo(OnCommandInternal) {
             HelpMessage = "Opens the main menu."
         });
 
-        Services.PluginInterface.UiBuilder.Draw += this.DrawUi;
-        Services.PluginInterface.UiBuilder.OpenConfigUi += this.OpenConfigUi;
+        Services.PluginInterface.UiBuilder.Draw += DrawUi;
+        Services.PluginInterface.UiBuilder.OpenConfigUi += OpenConfigUi;
 
         Action = Services.DataManager.GetExcelSheet<Action>();
         AozAction = Services.DataManager.GetExcelSheet<AozAction>();
@@ -95,143 +81,63 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
         if (Services.ClientState.IsLoggedIn) Services.Framework.RunOnFrameworkThread(OnLogin);
 
-// #if DEBUG
-//         this.MainWindow.IsOpen = true;
-//         // this.ConfigWindow.IsOpen = true;
-// #endif
+#if DEBUG
+        MainWindow.IsOpen = true;
+        this.ConfigWindow.IsOpen = true;
+#endif
 
+        Agent = AgentModule.Instance()->GetAgentByInternalId(AgentId.AozNotebook);
         Services.ClientState.Login += OnLogin;
         Services.ClientState.Logout += OnLogout;
-        Services.Framework.Update += this.FrameworkUpdate;
     }
+
+    public static List<ulong> SuppressedEventKinds { get; set; } = [0];
+
 
     public void Dispose() {
         Services.ClientState.Login -= OnLogin;
         Services.ClientState.Logout -= OnLogout;
+        
+        ReceiveEventHook?.Dispose();
+        Spellbook.Dispose();
 
-        Services.Framework.Update -= this.FrameworkUpdate;
-
-        this.WindowSystem.RemoveAllWindows();
-        this.MainWindow.Dispose();
-        this.ConfigWindow.Dispose();
+        WindowSystem.RemoveAllWindows();
+        MainWindow.Dispose();
+        ConfigWindow.Dispose();
 
         Services.CommandManager.RemoveHandler(CommandName);
-
-        BlueWindow.Dispose();
-        KamiToolKitLibrary.Dispose();
     }
 
     private void ToggleMainWindow() {
-        this.MainWindow.Toggle();
+        MainWindow.Toggle();
     }
 
     private void ToggleConfigWindow() {
-        this.ConfigWindow.Toggle();
+        ConfigWindow.Toggle();
     }
 
     private static void OnLogin() {
-        BlueWindow.Enable();
+        Spellbook.Enable();
         if (Configuration.Loadouts.Count == 0) {
             ImportGamePresets();
         }
     }
 
     private static void OnLogout(int type, int code) {
-        BlueWindow.Disable();
-    }
-
-    private static void GetCurrentBluSpells(ref List<uint> spellList) {
-        spellList.Clear();
-        for (var i = 0; i < 24; i++) {
-            var id = ActionManager.Instance()->GetActiveBlueMageActionInSlot(i);
-            if (id != 0)
-                spellList.Add(id);
-        }
-    }
-
-    private void FrameworkUpdate(IFramework framework) {
-        if (!Services.ClientState.IsLoggedIn) return;
-        if (++Ticks < 5) return;
-        Ticks = 0;
-
-        GetCurrentBluSpells(ref SelectedSpells);
-        TotalSpellsSelected = SelectedSpells.Count;
-
-        if (!SpellbookOpen) return;
-        var selected = new HashSet<uint>(SelectedSpells);
-        for (uint hotbarNum = 0; hotbarNum < 17; hotbarNum++) {
-            if (RaptureHotbar->IsHotbarShared(hotbarNum)) continue;
-            var maxSlots = hotbarNum >= 10 ? 12 : 16;
-            for (uint slotNum = 0; slotNum < maxSlots; slotNum++) {
-                var slot = RaptureHotbar->GetSlotById(hotbarNum, slotNum);
-                if (slot->CommandType == HotbarSlotType.Empty)
-                    continue;
-                if (slot->OriginalApparentSlotType == HotbarSlotType.Action)
-                    selected.Remove(slot->OriginalApparentActionId);
-            }
-        }
-        SpellsOnBar = TotalSpellsSelected - selected.Count;
+        Spellbook.Disable();
     }
 
 
-    private void AttachNode(AddonAOZNotebook* addon) {
-        SpellbookOpen = true;
+    public void SendAgentFilter(string search, NotebookFilterFlags flags) {
+        Services.Log.Info($"Sending Filter to Agent: '{search}' with '{flags}'");
+        using var returnValue = new RentedAtkValues(1);
+        using var command = new RentedAtkValues(3);
 
-        const int padding = 24;
+        command[0].SetInt(0);
+        command[1].SetInt((int) flags);
+        command[2].SetManagedString(search);
 
-        var spellNode = addon->GetNodeById(34);
-        var buttonsNode = addon->GetNodeById(40);
-        var spellsUsedCounter = addon->GetNodeById(37);
-
-        buttonsNode->SetPositionFloat((spellNode->Width - ((144 * 3) + (padding * 2))) / 2f, 148);
-        spellsUsedCounter->SetPositionFloat(spellsUsedCounter->X - 185f, spellsUsedCounter->Y);
-
-        if (spellNode is not null) {
-            this.buttonOpenPlugin = new TextButtonNode {
-                Position = new Vector2(buttonsNode->X + buttonsNode->Width + padding, buttonsNode->Y),
-                Size = new Vector2(144.0f, 28.0f),
-                IsVisible = true,
-                NodeFlags = NodeFlags.AnchorTop | NodeFlags.AnchorLeft | NodeFlags.Visible | NodeFlags.Enabled |
-                            NodeFlags.EmitsEvents,
-                String = "Load Even More",
-                Tooltip = "Added by Better in Blue"
-            };
-            this.buttonOpenPlugin.BackgroundNode.PartsList[0]->UldAsset->AtkTexture.LoadTexture("ui/uld/ButtonA.tex");
-            this.buttonOpenPlugin.AddColor = new Vector3 {Z = 0.2f}; //slight blue tint
-
-            this.buttonOpenPlugin.AddEvent(AtkEventType.MouseClick, () => this.MainWindow.Toggle());
-            this.buttonOpenPlugin.AttachNode(spellNode);
-
-            this.textSpellsOnBar = new TextNode {
-                FontSize = 11,
-                Position = new Vector2(spellNode->Width - 185, spellsUsedCounter->Y),
-                Size = new Vector2(190, spellsUsedCounter->Height),
-                FontType = FontType.MiedingerMed,
-                AlignmentType = AlignmentType.Left,
-                Tooltip = "Spells added to your hotbars",
-                String = "(00/00 on hotbars)",
-                TextColor = KnownColor.White.Vector(),
-                TextOutlineColor = KnownColor.CadetBlue.Vector(),
-                TextFlags = TextFlags.Edge
-            };
-
-            this.textSpellsOnBar.AttachNode(spellNode);
-        }
-    }
-
-    private void OnNodeUpdate(AddonAOZNotebook* addon) {
-        if (this.textSpellsOnBar is not null)
-            this.textSpellsOnBar.String = $"({SpellsOnBar}/{TotalSpellsSelected} on hotbars)";
-    }
-
-    private void DetachNodes(AddonAOZNotebook* addon) {
-        this.buttonOpenPlugin?.Dispose();
-        this.buttonOpenPlugin = null;
-
-        this.textSpellsOnBar?.Dispose();
-        this.textSpellsOnBar = null;
-
-        SpellbookOpen = false;
+        Agent->ReceiveEvent(returnValue, command, 3, 2);
     }
 
     public static IDalamudTextureWrap? GetIcon(uint id) {
@@ -248,14 +154,14 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     private void OnCommandInternal(string _, string args) {
         args = args.ToLower();
-        this.OnCommand(args.Split(' ').ToList());
+        OnCommand(args.Split(' ').ToList());
     }
 
     private void OnCommand(List<string> args) {
         switch (args[0]) {
             case "config":
             case "settings":
-                this.OpenConfigUi();
+                OpenConfigUi();
                 break;
             case "apply":
             case "load":
@@ -263,7 +169,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                 break;
 
             default:
-                this.MainWindow.IsOpen = true;
+                MainWindow.IsOpen = true;
                 break;
         }
     }
@@ -280,19 +186,21 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                     UiHelpers.ShowNotification($"Loadout '{loadout.Name}' applied.");
                     return;
                 }
+
                 Services.ChatGui.PrintError($"Could not apply loadout - {errors.FirstOrDefault()}",
                                             Name, 705);
                 return;
             }
+
         Services.ChatGui.PrintError("Could not find loadout.", Name, 705);
     }
 
     private void DrawUi() {
-        this.WindowSystem.Draw();
+        WindowSystem.Draw();
     }
 
     public void OpenConfigUi() {
-        this.ConfigWindow.IsOpen = true;
+        ConfigWindow.IsOpen = true;
     }
 
     public static uint AozToNormal(uint id) {
@@ -301,21 +209,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
     public static uint NormalToAoz(uint id) {
         var res = AozAction.FirstOrNull(aoz => aoz.Action.RowId == id);
-        if (res == null) throw new Exception("https://tenor.com/view/8032213");
+        if (res == null) return 0;
         return res.Value.RowId;
     }
 
-    public static bool AnyBluSpellOnCooldown() {
-        var actionManager = ActionManager.Instance();
-        foreach (var actionId in SelectedSpells) {
-            var group = actionManager->GetRecastGroup(1, actionId);
-            var detail = actionManager->GetRecastGroupDetail(group);
-            if (detail != null && detail->Elapsed > 0) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     // Mighty Guard; Aetheric Mimicry: Tank, DPS, Healer; Basic Instinct
     public static readonly List<uint> PermanentBluStatuses = [1719, 2124, 2125, 2126, 2498];
@@ -325,6 +222,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         if (player?.StatusList == null) {
             return false;
         }
+
         var character = (Character*) player.Address;
         var statusManager = character->GetStatusManager();
 
@@ -333,10 +231,12 @@ public sealed unsafe class Plugin : IDalamudPlugin {
             if (status.StatusId == 0) {
                 continue;
             }
+
             if (PermanentBluStatuses.Contains(status.StatusId)) {
                 return true;
             }
         }
+
         return false;
     }
 
@@ -354,6 +254,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
             if (actions.All(action => action == 0)) {
                 continue;
             }
+
             // the game stores active actions using their Action ID, but we store the AOZ ID 
             actions = actions.ToArray().Select(NormalToAoz).ToArray();
 
@@ -375,6 +276,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                     loadout.LoadoutHotbars.Add(config.Value);
                 }
             }
+
             for (uint hotbarNum = 10; hotbarNum < set.CrossHotBars.Length; hotbarNum++) {
                 var config = ImportGamePresetHotbar(hotbarNum,
                                                     set.CrossHotBars[(int) hotbarNum].AozActionIds,
@@ -383,8 +285,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                     loadout.LoadoutHotbars.Add(config.Value);
                 }
             }
+
             Configuration.Loadouts.Add(loadout);
         }
+
         Configuration.Save();
     }
 
@@ -397,6 +301,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         if (spellIds.ToArray().All(id => id == 0)) {
             return null;
         }
+
         for (var slotNum = 0; slotNum < spellIds.Length; slotNum++) {
             var id = spellIds[slotNum];
             var flag = macroFlags[slotNum];
@@ -404,6 +309,7 @@ public sealed unsafe class Plugin : IDalamudPlugin {
                 config.Slots[slotNum] = new HotbarSlot(0, HotbarSlotType.Empty);
                 continue;
             }
+
             if (flag) {
                 // if set this is actually a macro number that we must convert into a command id (RE'd)
                 var macroId = id - 100 * ((id / 100) & 0x7FFFFFF);
@@ -415,5 +321,13 @@ public sealed unsafe class Plugin : IDalamudPlugin {
         }
 
         return config;
+    }
+
+    private static readonly ExcelSheet<Addon> AddonText = Services.DataManager.GetExcelSheet<Addon>();
+
+    public static ReadOnlySeString GetAddonLogId(uint rowId) {
+        return AddonText.GetRow(rowId).Text
+                        .ReplaceText(" "u8, ""u8)
+                        .ReplaceText("/"u8, ""u8);
     }
 }

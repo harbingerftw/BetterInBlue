@@ -23,8 +23,8 @@ public struct HotbarSlot(uint id, HotbarSlotType type) {
 public struct HotbarConfig(uint id, HotbarSlot[] slots) {
     public uint Id = id;
     public HotbarSlot[] Slots = slots;
-    [JsonIgnore] public int MaxSlots => this.Id < 10 ? 12 : 16;
-    [JsonIgnore] public bool IsCrossHotbar => this.Id >= 10;
+    [JsonIgnore] public int MaxSlots => Id < 10 ? 12 : 16;
+    [JsonIgnore] public bool IsCrossHotbar => Id >= 10;
 }
 
 [Serializable]
@@ -43,7 +43,7 @@ public class Loadout(string name = "Unnamed Loadout") {
             return obj;
         } catch (Exception e) {
             Services.Log.Warning("Failed to import loadout.");
-            Services.Log.Warning(e.ToString());;
+            Services.Log.Warning(e.ToString());
             return null;
         }
     }
@@ -60,7 +60,7 @@ public class Loadout(string name = "Unnamed Loadout") {
     }
 
     public int ActionCount(uint id) {
-        return this.Actions.Count(x => x == id);
+        return Actions.Count(x => x == id);
     }
 
     public unsafe bool ActionUnlocked(uint id) {
@@ -82,14 +82,14 @@ public class Loadout(string name = "Unnamed Loadout") {
         // Can't apply in combat
         if (Services.Condition[ConditionFlag.InCombat])
             errors.Add("You must not be in combat.");
-        
-        if (Plugin.AnyBluSpellOnCooldown())
+
+        if (Plugin.Spellbook.AnyBluSpellOnCooldown())
             errors.Add("You must not have any spells on cooldown.");
 
         if (Plugin.AnyBluStatusActive())
             errors.Add("You must not have a spell effect active (aetheric mimicry etc.)");
 
-        foreach (var action in this.Actions) {
+        foreach (var action in Actions) {
             // No out of bounds indexing
             if (action > Plugin.AozAction.Count) {
                 errors.Add("Your loadout must not be invalid.");
@@ -98,13 +98,13 @@ public class Loadout(string name = "Unnamed Loadout") {
 
             if (action != 0) {
                 // Can't have two actions in the same loadout
-                if (this.ActionCount(action) > 1) {
+                if (ActionCount(action) > 1) {
                     errors.Add("You can not have duplicate actions.");
                     break;
                 }
 
                 // Can't apply an action you don't have
-                if (!this.ActionUnlocked(action)) {
+                if (!ActionUnlocked(action)) {
                     errors.Add("You must have every loadout action unlocked.");
                     break;
                 }
@@ -116,28 +116,28 @@ public class Loadout(string name = "Unnamed Loadout") {
 
     public unsafe bool Apply() {
         var actionManager = ActionManager.Instance();
-        Services.Log.Verbose($"Applying loadout {this.Name}");
+        Services.Log.Verbose($"Applying loadout {Name}");
 
         var arr = new uint[24];
         for (var i = 0; i < 24; i++)
-            arr[i] = Plugin.AozToNormal(this.Actions[i]);
+            arr[i] = Plugin.AozToNormal(Actions[i]);
 
         fixed (uint* ptr = arr) {
             var ret = actionManager->SetBlueMageActions(ptr);
             if (!ret) return false;
         }
 
-        this.ApplyToHotbars();
+        ApplyToHotbars();
 
         return true;
     }
 
     public void SaveHotbars() {
         if (Plugin.Configuration.SaveHotbarsStandard)
-            this.SaveHotbarSet(0, 10, 12, ref Plugin.Configuration.HotbarsStandard);
+            SaveHotbarSet(0, 10, 12, ref Plugin.Configuration.HotbarsStandard);
 
         if (Plugin.Configuration.SaveHotbarsCross)
-            this.SaveHotbarSet(10, 18, 16, ref Plugin.Configuration.HotbarsCross);
+            SaveHotbarSet(10, 18, 16, ref Plugin.Configuration.HotbarsCross);
     }
 
     private unsafe void SaveHotbarSet(uint start, uint end, uint maxSlots, ref bool[] enabled) {
@@ -153,12 +153,13 @@ public class Loadout(string name = "Unnamed Loadout") {
                 var slot = Plugin.RaptureHotbar->GetSlotById(hotbarNum, slotNum);
                 hotbarToSave.Slots[slotNum] = new HotbarSlot(slot->CommandId, slot->CommandType);
             }
-            this.LoadoutHotbars.Add(hotbarToSave);
+
+            LoadoutHotbars.Add(hotbarToSave);
         }
     }
 
     public unsafe void ApplyToHotbars() {
-        foreach (var bar in this.LoadoutHotbars) {
+        foreach (var bar in LoadoutHotbars) {
             if (Plugin.RaptureHotbar->IsHotbarShared(bar.Id)) continue;
 
             if (bar.IsCrossHotbar) {
@@ -169,9 +170,28 @@ public class Loadout(string name = "Unnamed Loadout") {
                     continue;
             }
 
-            Services.Log.Verbose($"Restoring hotbar {bar.Id + 1}");
+            Services.Log.Info($"Restoring hotbar {bar.Id + 1}");
 
             for (uint slotId = 0; slotId < bar.MaxSlots; slotId++) {
+                var hotbar = Plugin.RaptureHotbar->GetSlotById(bar.Id, slotId);
+                var isNotEmpty = hotbar->CommandType != HotbarSlotType.Empty;
+                var isBluAction = Plugin.NormalToAoz(hotbar->CommandId) != 0;
+
+                if (!Plugin.Configuration.OverwriteActionsWithBlank &&
+                    bar.Slots[slotId].CommandType == HotbarSlotType.Empty && isNotEmpty) {
+                    if (!(Plugin.Configuration.OverwriteOnlyBluActions &&
+                          isBluAction && bar.Slots[slotId].CommandType == HotbarSlotType.Empty)) {
+                        continue;
+                    }
+                }
+
+                if (Plugin.Configuration.OverwriteOnlyBluActions) {
+                    if (isNotEmpty && !(hotbar->CommandType == HotbarSlotType.Action && isBluAction) &&
+                        !(isBluAction && bar.Slots[slotId].CommandType == HotbarSlotType.Empty)) {
+                        continue;
+                    }
+                }
+                
                 Plugin.RaptureHotbar->SetAndSaveSlot(bar.Id,
                                                      slotId,
                                                      bar.Slots[slotId].CommandType,

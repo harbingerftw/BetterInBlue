@@ -5,6 +5,8 @@ using Dalamud.Interface;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.ImGuiNotification;
 using Dalamud.Interface.Utility.Raii;
+using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace BetterInBlue;
 
@@ -31,6 +33,7 @@ public static class UiHelpers {
             using var tt = ImRaii.Tooltip();
             ImGui.TextUnformatted(str);
         }
+
         return ret && !disabled;
     }
 
@@ -62,6 +65,16 @@ public static class ArrayExtensions {
         foreach (var t in array) {
             hashCode.Add(EqualityComparer<uint>.Default.GetHashCode(t));
         }
+
         return hashCode.ToHashCode();
+    }
+}
+
+public static class AddonExtensions {
+    extension(ref AddonAOZNotebook addon) {
+        public unsafe AtkResNode* GetWindowNodeById(uint id) {
+            if (addon.WindowNode is null || addon.WindowNode->Component is null) return null;
+            return addon.WindowNode->Component->UldManager.SearchNodeById(id);
+        }
     }
 }
