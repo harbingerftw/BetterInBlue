@@ -81,10 +81,10 @@ public sealed unsafe class Plugin : IDalamudPlugin {
 
         if (Services.ClientState.IsLoggedIn) Services.Framework.RunOnFrameworkThread(OnLogin);
 
-#if DEBUG
-        MainWindow.IsOpen = true;
-        this.ConfigWindow.IsOpen = true;
-#endif
+// #if DEBUG
+//         MainWindow.IsOpen = true;
+//         this.ConfigWindow.IsOpen = true;
+// #endif
 
         Agent = AgentModule.Instance()->GetAgentByInternalId(AgentId.AozNotebook);
         Services.ClientState.Login += OnLogin;
